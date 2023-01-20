@@ -7,21 +7,23 @@ package:
   version: {{ version }}
 
 source:
-  url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/pandarallel-{{ version }}.tar.gz
+  url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
   sha256: 70091652485050241ffac37c3e94d21732697c63ee4613ae7bf85da076be41f2
 
 build:
   number: 0
-  noarch: python
-  script: {{ PYTHON }} -m pip install . -vv
+  skip: True  # [py<36]
+  script: {{ PYTHON }} -m pip install --no-deps . -vv
 
 requirements:
   host:
+    - python
     - pip
-    - python >=3.6
+    - setuptools
+    - wheel
   run:
+    - python
     - dill >=0.3.1
-    - python >=3.6
     - pandas >=1
     - psutil
 
@@ -29,16 +31,28 @@ test:
   imports:
     - pandarallel
     - pandarallel.data_types
-  commands:
-    - pip check
+  # As pandarallel tests are lightweight we can include them for additional testing by pytest
+  files:
+    - test_pandarallel.py
   requires:
     - pip
+    - pytest
+  commands:
+    - pip check
+    - pytest test_pandarallel.py
 
 about:
   home: https://github.com/nalepae/pandarallel
-  summary: An easy to use library to speed up computation (by parallelizing on multi CPUs) with pandas.
   license: BSD-3-Clause
+  license_family: BSD
   license_file: LICENSE
+  summary: An easy to use library to speed up computation (by parallelizing on multi CPUs) with pandas.
+  description: |
+    pandarallel is a simple and efficient tool to parallelize Pandas operations on all available CPUs.
+    With a one line code change, it allows any Pandas user to take advandage of his multi-core computer, 
+    while pandas uses only one core.
+  dev_url: https://github.com/nalepae/pandarallel
+  doc_url: https://nalepae.github.io/pandarallel/
 
 extra:
   recipe-maintainers:

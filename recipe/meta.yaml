@@ -1,26 +1,24 @@
 {% set name = "pandarallel" %}
-{% set version = "1.6.4" %}
-
+{% set version = "1.6.5" %}
 
 package:
   name: {{ name|lower }}
   version: {{ version }}
 
 source:
-  url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
-  sha256: 70091652485050241ffac37c3e94d21732697c63ee4613ae7bf85da076be41f2
+  url: https://pypi.org/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
+  sha256: 1c2df98ff6441e8ae13ff428ceebaa7ec42d731f7f972c41ce4fdef1d3adf640
 
 build:
   number: 0
-  skip: True  # [py<36]
-  script: {{ PYTHON }} -m pip install --no-deps . -vv
+  skip: true  # [py<37]
+  script: {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
 
 requirements:
   host:
     - python
     - pip
     - setuptools
-    - wheel
   run:
     - python
     - dill >=0.3.1
@@ -31,15 +29,15 @@ test:
   imports:
     - pandarallel
     - pandarallel.data_types
-  # As pandarallel tests are lightweight we can include them for additional testing by pytest
-  files:
-    - test_pandarallel.py
+  source_files:
+    - tests
   requires:
     - pip
     - pytest
   commands:
     - pip check
-    - pytest test_pandarallel.py
+    - python -c "from importlib.metadata import version; assert(version('{{ name }}')=='{{ version }}')"
+    - pytest tests
 
 about:
   home: https://github.com/nalepae/pandarallel
@@ -49,10 +47,10 @@ about:
   summary: An easy to use library to speed up computation (by parallelizing on multi CPUs) with pandas.
   description: |
     pandarallel is a simple and efficient tool to parallelize Pandas operations on all available CPUs.
-    With a one line code change, it allows any Pandas user to take advandage of his multi-core computer, 
+    With a one line code change, it allows any Pandas user to take advandage of his multi-core computer,
     while pandas uses only one core.
   dev_url: https://github.com/nalepae/pandarallel
-  doc_url: https://nalepae.github.io/pandarallel/
+  doc_url: https://nalepae.github.io/pandarallel
 
 extra:
   recipe-maintainers:

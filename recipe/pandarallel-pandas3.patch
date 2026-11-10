@@ -1,0 +1,131 @@
+diff --git a/pandarallel/core.py b/pandarallel/core.py
+index c54ec14..a05e072 100644
+--- a/pandarallel/core.py
++++ b/pandarallel/core.py
+@@ -11,8 +11,14 @@ import dill
+ import pandas as pd
+ import psutil
+ from pandas.core.groupby import DataFrameGroupBy as PandaDataFrameGroupBy
+-from pandas.core.window.expanding import ExpandingGroupby as PandasExpandingGroupby
+-from pandas.core.window.rolling import RollingGroupby as PandasRollingGroupby
++try:
++    from pandas.core.window.expanding import ExpandingGroupby as PandasExpandingGroupby
++except ImportError:  # pandas 3 renamed ExpandingGroupby to ExpandingGroupBy
++    from pandas.core.window.expanding import ExpandingGroupBy as PandasExpandingGroupby
++try:
++    from pandas.core.window.rolling import RollingGroupby as PandasRollingGroupby
++except ImportError:  # pandas 3 renamed RollingGroupby to RollingGroupBy
++    from pandas.core.window.rolling import RollingGroupBy as PandasRollingGroupby
+ 
+ from .data_types import (
+     DataFrame,
+diff --git a/pandarallel/data_types/dataframe.py b/pandarallel/data_types/dataframe.py
+index 29c7e50..f021b56 100644
+--- a/pandarallel/data_types/dataframe.py
++++ b/pandarallel/data_types/dataframe.py
+@@ -66,6 +66,8 @@ class DataFrame:
+             user_defined_function_kwargs: Dict[str, Any],
+             extra: Dict[str, Any],
+         ) -> pd.DataFrame:
++            if hasattr(data, "map"):  # pandas 3 renamed DataFrame.applymap to DataFrame.map
++                return data.map(user_defined_function)
+             return data.applymap(user_defined_function)
+ 
+         @staticmethod
+diff --git a/pandarallel/data_types/dataframe_groupby.py b/pandarallel/data_types/dataframe_groupby.py
+index f2dbb91..d3a2c03 100644
+--- a/pandarallel/data_types/dataframe_groupby.py
++++ b/pandarallel/data_types/dataframe_groupby.py
+@@ -16,9 +16,28 @@ class DataFrameGroupBy:
+         ) -> Iterator[List[Tuple[int, pd.DataFrame]]]:
+             chunks = chunk(dataframe_groupby.ngroups, nb_workers)
+             iterator = iter(dataframe_groupby)
++            # pandas 3 excludes the grouping columns from the frame handed to
++            # DataFrameGroupBy.apply(); iteration still yields them, so drop
++            # them here to keep parallel_apply equivalent to apply().
++            grouping_columns = (
++                [key for key in dataframe_groupby.keys if isinstance(key, str)]
++                if get_pandas_version() >= (3,)
++                else []
++            )
+ 
+             for chunk_ in chunks:
+-                yield [next(iterator) for _ in range(chunk_.stop - chunk_.start)]
++                items = [next(iterator) for _ in range(chunk_.stop - chunk_.start)]
++                if grouping_columns:
++                    items = [
++                        (
++                            key,
++                            df.drop(
++                                columns=[c for c in grouping_columns if c in df.columns]
++                            ),
++                        )
++                        for key, df in items
++                    ]
++                yield items
+ 
+         @staticmethod
+         def work(
+diff --git a/pandarallel/data_types/expanding_groupby.py b/pandarallel/data_types/expanding_groupby.py
+index a44f4fe..7247b65 100644
+--- a/pandarallel/data_types/expanding_groupby.py
++++ b/pandarallel/data_types/expanding_groupby.py
+@@ -2,7 +2,10 @@ import multiprocessing
+ from typing import Any, Callable, Dict, Iterable, Iterator, List, Tuple
+ 
+ import pandas as pd
+-from pandas.core.window.expanding import ExpandingGroupby as PandasExpandingGroupby
++try:
++    from pandas.core.window.expanding import ExpandingGroupby as PandasExpandingGroupby
++except ImportError:  # pandas 3 renamed ExpandingGroupby to ExpandingGroupBy
++    from pandas.core.window.expanding import ExpandingGroupBy as PandasExpandingGroupby
+ 
+ from ..utils import WorkerStatus, chunk, get_pandas_version
+ from .generic import DataType
+diff --git a/pandarallel/data_types/rolling_groupby.py b/pandarallel/data_types/rolling_groupby.py
+index 8020ed7..f27653c 100644
+--- a/pandarallel/data_types/rolling_groupby.py
++++ b/pandarallel/data_types/rolling_groupby.py
+@@ -2,7 +2,10 @@ import multiprocessing
+ from typing import Any, Callable, Dict, Iterable, Iterator, List, Tuple
+ 
+ import pandas as pd
+-from pandas.core.window.rolling import RollingGroupby as PandasRollingGroupby
++try:
++    from pandas.core.window.rolling import RollingGroupby as PandasRollingGroupby
++except ImportError:  # pandas 3 renamed RollingGroupby to RollingGroupBy
++    from pandas.core.window.rolling import RollingGroupBy as PandasRollingGroupby
+ 
+ from ..utils import WorkerStatus, chunk, get_pandas_version
+ from .generic import DataType
+diff --git a/tests/test_pandarallel.py b/tests/test_pandarallel.py
+index 0f66fcf..9dd436f 100644
+--- a/tests/test_pandarallel.py
++++ b/tests/test_pandarallel.py
+@@ -94,11 +94,15 @@ def func_series_rolling_apply(request):
+ @pytest.fixture()
+ def func_dataframe_groupby_apply():
+     def func(df):
++        if isinstance(df, pd.Series):  # pandas 3 passes a Series for single-column groups
++            series = df
++        else:
++            series = df.b if "b" in df.columns else df.iloc[:, 0]
+         dum = 0
+-        for item in df.b:
++        for item in series:
+             dum += math.log10(math.sqrt(math.exp(item**2)))
+ 
+-        return dum / len(df.b)
++        return dum / len(series)
+ 
+     return func
+ 
+@@ -218,7 +222,7 @@ def test_dataframe_applymap(pandarallel_init, func_dataframe_applymap, df_size):
+     )
+     df.index = [item / 10 for item in df.index]
+ 
+-    res = df.applymap(func_dataframe_applymap)
++    res = df.map(func_dataframe_applymap) if hasattr(df, "map") else df.applymap(func_dataframe_applymap)
+     res_parallel = df.parallel_applymap(func_dataframe_applymap)
+     assert res.equals(res_parallel)
+ 

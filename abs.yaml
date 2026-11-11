@@ -1,8 +1,2 @@
-# Temporary: build and test against the dill 0.4.1 build 1 artifacts from
-# AnacondaRecipes/dill-feedstock#8 (commit 919cd63, PKG-19597). Drop this
-# channel once dill 0.4.1 build 1 is available in defaults.
-channels:
-  - https://staging.continuum.io/pbp/fs/dill-feedstock/pr8/919cd63
-
 build_env_vars:
   ANACONDA_ROCKET_ENABLE_PY315: "yes"
